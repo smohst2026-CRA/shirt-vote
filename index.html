@@ -119,9 +119,44 @@
   }
   .leading .bar-fill{background:var(--winner);}
 
+  .action-bar{
+    max-width:1100px;
+    margin:24px auto 0;
+    padding:0 16px;
+    text-align:center;
+    display:flex;
+    gap:12px;
+    justify-content:center;
+    flex-wrap:wrap;
+  }
+  .confirm-btn{
+    background:#16a34a;
+    color:#fff;
+    border:none;
+    border-radius:8px;
+    padding:12px 28px;
+    font-size:15px;
+    font-weight:700;
+    cursor:pointer;
+  }
+  .confirm-btn:hover{background:#15803d;}
+  .confirm-btn:disabled{background:#9ca3af;cursor:not-allowed;}
+
+  .results-btn{
+    background:var(--primary);
+    color:#fff;
+    border:none;
+    border-radius:8px;
+    padding:12px 28px;
+    font-size:15px;
+    font-weight:700;
+    cursor:pointer;
+  }
+  .results-btn:hover{background:var(--primary-dark);}
+
   .reset-wrap{
     max-width:1100px;
-    margin:30px auto 0;
+    margin:14px auto 0;
     padding:0 16px;
     text-align:center;
   }
@@ -135,6 +170,16 @@
     cursor:pointer;
   }
   .reset-btn:hover{background:#b91c1c;}
+
+  /* ซ่อนผลโหวตจนกว่าจะกด "เช็คผลการโหวต" */
+  .winner-banner, .status{display:none;}
+  .stats, .bar-bg{display:none;}
+  body.show-results .winner-banner,
+  body.show-results .status,
+  body.show-results .stats,
+  body.show-results .bar-bg{display:initial;}
+  body.show-results .stats{display:flex;}
+  .card.selected{outline:3px solid var(--primary);}
 
   .crown{
     position:absolute;
@@ -221,6 +266,11 @@
 
 <div class="grid" id="grid"></div>
 
+<div class="action-bar">
+  <button class="confirm-btn" id="confirmBtn" disabled>ยืนยันการโหวต</button>
+  <button class="results-btn" id="resultsBtn">เช็คผลการโหวต</button>
+</div>
+
 <div class="reset-wrap">
   <button class="reset-btn" id="resetBtn">รีเซ็ตคะแนนทั้งหมด</button>
 </div>
@@ -251,6 +301,7 @@ const DESIGNS = [
   { id: 10, name: "แบบที่ 10", img: "images/10.jpg" },
   { id: 11, name: "แบบที่ 11", img: "images/11.jpg" },
   { id: 12, name: "แบบที่ 12", img: "images/12.jpg" },
+  { id: 13, name: "แบบที่ 13", img: "images/13.jpg" },
 ];
 /* ===================== */
 
@@ -260,9 +311,12 @@ const grid = document.getElementById("grid");
 const winnerBanner = document.getElementById("winnerBanner");
 const statusLine = document.getElementById("statusLine");
 const resetBtn = document.getElementById("resetBtn");
+const confirmBtn = document.getElementById("confirmBtn");
+const resultsBtn = document.getElementById("resultsBtn");
 
 let votes = {};      // { id: count }
 let myVote = localStorage.getItem(VOTED_KEY); // id ที่เคยโหวต (string) หรือ null
+let selectedId = null; // id ที่เลือกไว้ ยังไม่ยืนยัน
 let refreshTimer = null;
 
 // ---------- Render ----------
@@ -277,16 +331,22 @@ function render() {
     const isLeading = maxVotes > 0 && count === maxVotes;
     const isMine = String(myVote) === String(d.id);
 
+    const isSelected = !myVote && String(selectedId) === String(d.id);
+
     const card = document.createElement("div");
-    card.className = "card" + (isLeading ? " leading" : "");
+    card.className = "card" + (isLeading ? " leading" : "") + (isSelected ? " selected" : "");
+
+    let btnLabel = "เลือก";
+    if (isMine) btnLabel = "✓ คุณเลือกแบบนี้";
+    else if (isSelected) btnLabel = "✓ เลือกแบบนี้แล้ว";
 
     card.innerHTML = `
       ${isLeading ? '<div class="crown">🏆 ผู้นำ</div>' : ""}
       <div class="img-wrap" data-img="${d.img}" data-name="${d.name}"><img src="${d.img}" alt="${d.name}" loading="lazy"></div>
       <div class="card-body">
         <h3>${d.name}</h3>
-        <button class="vote-btn ${isMine ? "voted" : ""}" data-id="${d.id}" ${myVote ? "disabled" : ""}>
-          ${isMine ? "✓ คุณเลือกแบบนี้" : "โหวตแบบนี้"}
+        <button class="vote-btn ${isMine || isSelected ? "voted" : ""}" data-id="${d.id}" ${myVote ? "disabled" : ""}>
+          ${btnLabel}
         </button>
         <div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div>
         <div class="stats">
@@ -298,13 +358,18 @@ function render() {
     grid.appendChild(card);
   });
 
-  // ปุ่มโหวต
+  // ปุ่มเลือกแบบ (ยังไม่ยืนยัน)
   grid.querySelectorAll(".vote-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       if (myVote) return;
-      castVote(btn.dataset.id);
+      selectedId = btn.dataset.id;
+      render();
     });
   });
+
+  // ปุ่มยืนยันการโหวต
+  confirmBtn.disabled = !!myVote || !selectedId;
+  confirmBtn.textContent = myVote ? "✓ ยืนยันแล้ว" : "ยืนยันการโหวต";
 
   // คลิกรูปเพื่อซูม
   grid.querySelectorAll(".img-wrap").forEach(el => {
@@ -357,6 +422,7 @@ function saveLocalVotes() {
 // ---------- Data: vote ----------
 async function castVote(id) {
   myVote = id;
+  selectedId = id;
   localStorage.setItem(VOTED_KEY, id);
 
   // อัปเดต UI ทันที (optimistic)
@@ -382,6 +448,19 @@ async function castVote(id) {
   }
 }
 
+// ---------- Confirm vote ----------
+confirmBtn.addEventListener("click", () => {
+  if (myVote || !selectedId) return;
+  if (!confirm("ยืนยันการโหวตแบบนี้ใช่หรือไม่? (โหวตได้ครั้งเดียว)")) return;
+  castVote(selectedId);
+});
+
+// ---------- Show/hide results ----------
+resultsBtn.addEventListener("click", () => {
+  const showing = document.body.classList.toggle("show-results");
+  resultsBtn.textContent = showing ? "ซ่อนผลการโหวต" : "เช็คผลการโหวต";
+});
+
 // ---------- Reset ----------
 resetBtn.addEventListener("click", async () => {
   if (!confirm("ต้องการรีเซ็ตคะแนนทั้งหมดหรือไม่?")) return;
@@ -389,6 +468,7 @@ resetBtn.addEventListener("click", async () => {
   localStorage.removeItem(VOTED_KEY);
   localStorage.removeItem(LOCAL_VOTES_KEY);
   myVote = null;
+  selectedId = null;
   votes = {};
 
   if (APPS_SCRIPT_URL) {
